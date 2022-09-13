@@ -1,0 +1,29 @@
+[package]
+name = "figment_file_provider_adapter"
+version = "0.1.0"
+edition = "2021"
+authors = ["nitnelave <valentin@tolmer.fr>"]
+description = "A Figment provider wrapper to load config values from files"
+license = "MIT"
+keywords = ["figment", "file"]
+categories = ["command-line-interface", "config"]
+repository = "https://github.com/nitnelave/figment_file_provider_adapter"
+homepage = "https://github.com/nitnelave/figment_file_provider_adapter"
+documentation = "https://docs.rs/figment_file_provider_adapter"
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+    "README.md",
+]
+
+[dependencies.figment]
+version = "^0.10"
+features = []
+
+[dev_dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dev_dependencies.figment]
+version = "^0.10"
+features = ["env", "test", "toml"]
