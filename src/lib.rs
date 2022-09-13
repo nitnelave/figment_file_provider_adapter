@@ -196,7 +196,7 @@ impl FileAdapter {
     /// use figment_file_provider_adapter::FileAdapter;
     /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_"));
     /// ```
-    pub fn wrap<T: Provider + 'static> (provider: T) -> Self {
+    pub fn wrap<T: Provider + 'static>(provider: T) -> Self {
         Self {
             provider: Box::new(provider),
             suffix: "_file".to_string(),
@@ -377,7 +377,7 @@ fn process_string(
             }
             let contents = std::fs::read_to_string(&value).map_err(|e| {
                 Kind::Message(format!(
-                    "Could not open `{}` from env variable `{}`: {:#}",
+                    "Could not open `{}` from config value `{}`: {:#}",
                     &value, &key, e
                 ))
             })?;
@@ -535,9 +535,7 @@ mod tests {
             jail.create_file("secret", "bar")?;
 
             let config = figment::Figment::new()
-                .merge(
-                    FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).with_suffix("_PATH"),
-                )
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).with_suffix("_PATH"))
                 .extract::<Config>()?;
 
             assert_eq!(config.foo, "bar");
