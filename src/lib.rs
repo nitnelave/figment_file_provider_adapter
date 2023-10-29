@@ -136,7 +136,7 @@ use figment::{
     value::{Dict, Map, Tag, Value},
     Profile, Provider,
 };
-use std::collections::HashSet;
+use std::{collections::HashSet, path::{PathBuf, Path}};
 
 /// Provider that reads config values from a given provider, and reads the values from the
 /// pointed file for each key that ends in "_FILE".
@@ -175,6 +175,7 @@ use std::collections::HashSet;
 pub struct FileAdapter {
     provider: Box<dyn Provider>,
     suffix: String,
+    relative_dir:PathBuf,
 }
 
 /// A [`FileAdapter`] whose suffix cannot be changed.
@@ -200,6 +201,7 @@ impl FileAdapter {
         Self {
             provider: Box::new(provider),
             suffix: "_file".to_string(),
+            relative_dir: PathBuf::new(),
         }
     }
 
@@ -234,6 +236,23 @@ impl FileAdapter {
     pub fn with_suffix(self, suffix: &str) -> Self {
         Self {
             suffix: suffix.to_lowercase(),
+            ..self
+        }
+    }
+
+    /// Provide a relative dir to be applied to the paths when finding files from which to read values
+    ///
+    /// ```rust
+    /// use figment::providers::Env;
+    /// use figment_file_provider_adapter::FileAdapter;
+    /// // This provider will only look at the variables FOO, FOO_FILE, BAR and BAR_FILE.
+    /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_dir("foo");
+    /// ```
+    pub fn relative_dir<P: AsRef<Path>>(self, path: P) -> Self {
+        let mut relative_dir = self.relative_dir.clone();
+        relative_dir.push(path);
+        Self {
+            relative_dir,
             ..self
         }
     }
@@ -325,6 +344,7 @@ impl Provider for FileAdapterWithRestrictions {
                 Ok((
                     profile,
                     process_dict(
+                        self.file_adapter.relative_dir.clone(),
                         dict,
                         &self.file_adapter.suffix,
                         &self.include_keys,
@@ -345,12 +365,13 @@ impl Provider for FileAdapter {
         self.provider
             .data()?
             .into_iter()
-            .map(|(profile, dict)| Ok((profile, process_dict(dict, &self.suffix, &None, &None)?)))
+            .map(|(profile, dict)| Ok((profile, process_dict(self.relative_dir.clone(), dict, &self.suffix, &None, &None)?)))
             .collect()
     }
 }
 
 fn process_string(
+    relative_dir: PathBuf,
     key: String,
     value: String,
     tag: Tag,
@@ -375,7 +396,9 @@ fn process_string(
             if all_keys.contains(stripped_key) {
                 return Ok(None);
             }
-            let contents = std::fs::read_to_string(&value).map_err(|e| {
+            let mut target_file = relative_dir.clone();
+            target_file.push(&value);
+            let contents = std::fs::read_to_string(target_file).map_err(|e| {
                 Kind::Message(format!(
                     "Could not open `{}` from config value `{}`: {:#}",
                     &value, &key, e
@@ -391,6 +414,7 @@ fn process_string(
 }
 
 fn process_dict(
+    relative_dir: PathBuf,
     provider_dict: Dict,
     suffix: &str,
     include_keys: &Option<HashSet<String>>,
@@ -403,11 +427,11 @@ fn process_dict(
     let process_key_value = |(key, value): (String, Value)| {
         Ok(match value {
             Value::String(tag, v) => {
-                process_string(key, v, tag, suffix, include_keys, exclude_keys, &keys)?
+                process_string(relative_dir.clone(), key, v, tag, suffix, include_keys, exclude_keys, &keys)?
             }
             figment::value::Value::Dict(tag, d) => Some((
                 key,
-                Value::Dict(tag, process_dict(d, suffix, include_keys, exclude_keys)?),
+                Value::Dict(tag, process_dict(relative_dir.clone(), d, suffix, include_keys, exclude_keys)?),
             )),
             v => Some((key, v)),
         })
@@ -494,6 +518,22 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn basic_env_file_with_relative_dir() {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("FIGMENT_TEST_FOO_FILE", "subdir/secret");
+            jail.create_file("subdir/secret", "bar")?;
+
+            let config = figment::Figment::new()
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir("subdir"))
+                .extract::<Config>()?;
+
+            assert_eq!(config.foo, "bar");
+            Ok(())
+        });
+    }
+
 
     #[test]
     fn integer() {
