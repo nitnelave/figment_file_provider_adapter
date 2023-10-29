@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn basic_env_file_with_relative_dir() {
         figment::Jail::expect_with(|jail| {
-            jail.set_env("FIGMENT_TEST_FOO_FILE", "subdir/secret");
+            jail.set_env("FIGMENT_TEST_FOO_FILE", "secret");
             jail.create_file("subdir/secret", "bar")?;
 
             let config = figment::Figment::new()
