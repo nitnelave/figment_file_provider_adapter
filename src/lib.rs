@@ -136,7 +136,10 @@ use figment::{
     value::{Dict, Map, Tag, Value},
     Profile, Provider,
 };
-use std::{collections::HashSet, path::{PathBuf, Path}};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 /// Provider that reads config values from a given provider, and reads the values from the
 /// pointed file for each key that ends in "_FILE".
@@ -175,7 +178,7 @@ use std::{collections::HashSet, path::{PathBuf, Path}};
 pub struct FileAdapter {
     provider: Box<dyn Provider>,
     suffix: String,
-    relative_dir:PathBuf,
+    relative_dir: PathBuf,
 }
 
 /// A [`FileAdapter`] whose suffix cannot be changed.
@@ -245,7 +248,7 @@ impl FileAdapter {
     /// ```rust
     /// use figment::providers::Env;
     /// use figment_file_provider_adapter::FileAdapter;
-    /// // This provider will only look at the variables FOO, FOO_FILE, BAR and BAR_FILE.
+    /// // This provider will only at the variables prefixed with MY_APP_ and attempt to resolve them in the directory "foo".
     /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_dir("foo");
     /// ```
     pub fn relative_dir<P: AsRef<Path>>(self, path: P) -> Self {
@@ -344,7 +347,7 @@ impl Provider for FileAdapterWithRestrictions {
                 Ok((
                     profile,
                     process_dict(
-                        self.file_adapter.relative_dir.clone(),
+                        &self.file_adapter.relative_dir,
                         dict,
                         &self.file_adapter.suffix,
                         &self.include_keys,
@@ -365,13 +368,18 @@ impl Provider for FileAdapter {
         self.provider
             .data()?
             .into_iter()
-            .map(|(profile, dict)| Ok((profile, process_dict(self.relative_dir.clone(), dict, &self.suffix, &None, &None)?)))
+            .map(|(profile, dict)| {
+                Ok((
+                    profile,
+                    process_dict(&self.relative_dir, dict, &self.suffix, &None, &None)?,
+                ))
+            })
             .collect()
     }
 }
 
 fn process_string(
-    relative_dir: PathBuf,
+    relative_dir: &PathBuf,
     key: String,
     value: String,
     tag: Tag,
@@ -414,7 +422,7 @@ fn process_string(
 }
 
 fn process_dict(
-    relative_dir: PathBuf,
+    relative_dir: &PathBuf,
     provider_dict: Dict,
     suffix: &str,
     include_keys: &Option<HashSet<String>>,
@@ -426,12 +434,22 @@ fn process_dict(
         .collect::<HashSet<_>>();
     let process_key_value = |(key, value): (String, Value)| {
         Ok(match value {
-            Value::String(tag, v) => {
-                process_string(relative_dir.clone(), key, v, tag, suffix, include_keys, exclude_keys, &keys)?
-            }
+            Value::String(tag, v) => process_string(
+                relative_dir,
+                key,
+                v,
+                tag,
+                suffix,
+                include_keys,
+                exclude_keys,
+                &keys,
+            )?,
             figment::value::Value::Dict(tag, d) => Some((
                 key,
-                Value::Dict(tag, process_dict(relative_dir.clone(), d, suffix, include_keys, exclude_keys)?),
+                Value::Dict(
+                    tag,
+                    process_dict(relative_dir, d, suffix, include_keys, exclude_keys)?,
+                ),
             )),
             v => Some((key, v)),
         })
@@ -523,6 +541,7 @@ mod tests {
     fn basic_env_file_with_relative_dir() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("FIGMENT_TEST_FOO_FILE", "secret");
+            jail.create_directory("subdir")?;
             jail.create_file("subdir/secret", "bar")?;
 
             let config = figment::Figment::new()
@@ -534,7 +553,21 @@ mod tests {
         });
     }
 
+    #[test]
+    fn basic_env_file_with_absolute_dir() {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("FIGMENT_TEST_FOO_FILE", "secret");
+            let abs_dir = jail.create_directory("subdir")?;
+            jail.create_file("subdir/secret", "bar")?;
 
+            let config = figment::Figment::new()
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir(abs_dir))
+                .extract::<Config>()?;
+
+            assert_eq!(config.foo, "bar");
+            Ok(())
+        });
+    }
     #[test]
     fn integer() {
         figment::Jail::expect_with(|jail| {
