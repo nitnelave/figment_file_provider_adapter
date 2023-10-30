@@ -243,12 +243,12 @@ impl FileAdapter {
         }
     }
 
-    /// Provide a relative dir to be applied to the paths when finding files from which to read values
+    /// Provide a relative dir to be applied to the paths when finding files from which to read values.
     ///
     /// ```rust
     /// use figment::providers::Env;
     /// use figment_file_provider_adapter::FileAdapter;
-    /// // This provider will only at the variables prefixed with MY_APP_ and attempt to resolve them in the directory "foo".
+    /// // This provider will only at the variables prefixed with MY_APP_ and attempt to resolve any _FILE reference relative to the "foo" directory.
     /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_dir("foo");
     /// ```
     pub fn relative_dir<P: AsRef<Path>>(self, path: P) -> Self {
@@ -404,9 +404,7 @@ fn process_string(
             if all_keys.contains(stripped_key) {
                 return Ok(None);
             }
-            let mut target_file = relative_dir.clone();
-            target_file.push(&value);
-            let contents = std::fs::read_to_string(target_file).map_err(|e| {
+            let contents = std::fs::read_to_string(relative_dir.join(&value)).map_err(|e| {
                 Kind::Message(format!(
                     "Could not open `{}` from config value `{}`: {:#}",
                     &value, &key, e
@@ -541,11 +539,14 @@ mod tests {
     fn basic_env_file_with_relative_dir() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("FIGMENT_TEST_FOO_FILE", "secret");
-            jail.create_directory("subdir")?;
-            jail.create_file("subdir/secret", "bar")?;
+            let subdir = jail.create_dir("subdir")?;
+
+            jail.create_file(subdir.join("secret"), "bar")?;
+
+            assert!(!subdir.is_absolute());
 
             let config = figment::Figment::new()
-                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir("subdir"))
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir(subdir))
                 .extract::<Config>()?;
 
             assert_eq!(config.foo, "bar");
@@ -557,8 +558,12 @@ mod tests {
     fn basic_env_file_with_absolute_dir() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("FIGMENT_TEST_FOO_FILE", "secret");
-            let abs_dir = jail.create_directory("subdir")?;
-            jail.create_file("subdir/secret", "bar")?;
+            let subdir = jail.create_dir("subdir")?;
+
+            jail.create_file(subdir.join("secret"), "bar")?;
+
+            let abs_dir = jail.directory().join(&subdir);
+            assert!(abs_dir.is_absolute());
 
             let config = figment::Figment::new()
                 .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir(abs_dir))
