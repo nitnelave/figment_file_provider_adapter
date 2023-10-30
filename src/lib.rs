@@ -249,9 +249,9 @@ impl FileAdapter {
     /// use figment::providers::Env;
     /// use figment_file_provider_adapter::FileAdapter;
     /// // This provider will only at the variables prefixed with MY_APP_ and attempt to resolve any _FILE reference relative to the "foo" directory.
-    /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_dir("foo");
+    /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_to_dir("foo");
     /// ```
-    pub fn relative_dir<P: AsRef<Path>>(self, path: P) -> Self {
+    pub fn relative_to_dir<P: AsRef<Path>>(self, path: P) -> Self {
         let mut relative_dir = self.relative_dir.clone();
         relative_dir.push(path);
         Self {
@@ -546,7 +546,7 @@ mod tests {
             assert!(!subdir.is_absolute());
 
             let config = figment::Figment::new()
-                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir(subdir))
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_to_dir(subdir))
                 .extract::<Config>()?;
 
             assert_eq!(config.foo, "bar");
@@ -566,7 +566,7 @@ mod tests {
             assert!(abs_dir.is_absolute());
 
             let config = figment::Figment::new()
-                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_dir(abs_dir))
+                .merge(FileAdapter::wrap(Env::prefixed("FIGMENT_TEST_")).relative_to_dir(abs_dir))
                 .extract::<Config>()?;
 
             assert_eq!(config.foo, "bar");
