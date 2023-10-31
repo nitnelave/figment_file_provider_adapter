@@ -252,7 +252,7 @@ impl FileAdapter {
     /// let file_adapter = FileAdapter::wrap(Env::prefixed("MY_APP_")).relative_to_dir("foo");
     /// ```
     pub fn relative_to_dir<P: AsRef<Path>>(self, path: P) -> Self {
-        let mut relative_dir = self.relative_dir.join(path);
+        let relative_dir = self.relative_dir.join(path);
 
         Self {
             relative_dir,
