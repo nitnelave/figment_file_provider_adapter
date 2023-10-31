@@ -1,6 +1,6 @@
 [package]
 name = "figment_file_provider_adapter"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["nitnelave <valentin@tolmer.fr>"]
 description = "A Figment provider wrapper to load config values from files"
